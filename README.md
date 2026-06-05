@@ -26,6 +26,24 @@ func start
 curl -sS http://localhost:7071/api/files/raw | head -n 3
 ```
 
+## Error response format
+
+All endpoints return errors in the following JSON format:
+
+```json
+{
+  "code": "BadRequest",
+  "message": "Query parameter 'department' is required."
+}
+```
+
+Representative status mapping:
+
+- `400 BadRequest`: request validation errors (example: missing `department`)
+- `404 NotFound`: target data/file not found
+- `500 ServerError`: server-side configuration or unexpected errors
+- `503 DependencyUnavailable`: OneLake or SQL access/authentication failures
+
 ## Development
 
 ### Prerequisites

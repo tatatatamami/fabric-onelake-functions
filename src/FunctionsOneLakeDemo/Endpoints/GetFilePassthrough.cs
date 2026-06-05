@@ -1,5 +1,6 @@
 using Azure.Identity;
 using Azure.Storage.Files.DataLake;
+using function_onelake.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -26,35 +27,41 @@ public class GetFilePassthrough
 
         try
         {
-            // ŠÂ‹«•Ï”‚©‚ç OneLake ‚Ìƒtƒ@ƒCƒ‹ URL ‚ğæ“¾
+            // ï¿½Â‹ï¿½ï¿½Ïï¿½ï¿½ï¿½ï¿½ï¿½ OneLake ï¿½Ìƒtï¿½@ï¿½Cï¿½ï¿½ URL ï¿½ï¿½ï¿½æ“¾
             var oneLakeFileUrl = Environment.GetEnvironmentVariable("ONELAKE_DFS_FILE_URL");
             _logger.LogInformation("ONELAKE_DFS_FILE_URL = {Url}", oneLakeFileUrl);
 
             if (string.IsNullOrEmpty(oneLakeFileUrl))
             {
                 _logger.LogError("ONELAKE_DFS_FILE_URL environment variable is not set.");
-                return req.CreateResponse(HttpStatusCode.InternalServerError);
+                return await req.CreateErrorResponseAsync(
+                    HttpStatusCode.InternalServerError,
+                    "ServerError",
+                    "Environment variable 'ONELAKE_DFS_FILE_URL' is not configured.");
             }
 
-            // OneLake ‚ª—v‹‚·‚é API ƒo[ƒWƒ‡ƒ“‚ğ–¾¦i2023-11-03j
+            // OneLake ï¿½ï¿½ï¿½vï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ API ï¿½oï¿½[ï¿½Wï¿½ï¿½ï¿½ï¿½ï¿½ğ–¾ï¿½ï¿½i2023-11-03ï¿½j
             var dlOptions = new DataLakeClientOptions(DataLakeClientOptions.ServiceVersion.V2023_11_03);
 
-            // ‚Ü‚¸‚Í Azure CLI ‚Æ“¯‚¶‘Šiî•ñ‚Å“®‚©‚µ‚Ä‚İ‚éi“®ìŠm”F—pj
-            // ƒfƒ‚‚Å–â‘è‚È‚¯‚ê‚Î _credential ‚É·‚µ‘Ö‚¦‰Â”\
+            // ï¿½Ü‚ï¿½ï¿½ï¿½ Azure CLI ï¿½Æ“ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½iï¿½ï¿½ï¿½Å“ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚İ‚ï¿½iï¿½ï¿½ï¿½ï¿½mï¿½Fï¿½pï¿½j
+            // ï¿½fï¿½ï¿½ï¿½Å–ï¿½ï¿½È‚ï¿½ï¿½ï¿½ï¿½ _credential ï¿½Éï¿½ï¿½ï¿½ï¿½Ö‚ï¿½ï¿½Â”\
             var credential = new AzureCliCredential();
 
-            // FileClient ‚ğ¶¬
+            // FileClient ï¿½ğ¶ï¿½
             var fileClient = new DataLakeFileClient(new Uri(oneLakeFileUrl), credential, dlOptions);
 
-            // ƒtƒ@ƒCƒ‹‘¶İŠm”Fi”CˆÓA‚È‚­‚Ä‚à Read ‘¤‚Å 404 ‚ğE‚¦‚éj
+            // ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½İŠmï¿½Fï¿½iï¿½Cï¿½ÓAï¿½È‚ï¿½ï¿½Ä‚ï¿½ Read ï¿½ï¿½ï¿½ï¿½ 404 ï¿½ï¿½ï¿½Eï¿½ï¿½ï¿½ï¿½j
             var existsResponse = await fileClient.ExistsAsync();
             if (!existsResponse.Value)
             {
                 _logger.LogWarning("File not found at URL: {FileUrl}", oneLakeFileUrl);
-                return req.CreateResponse(HttpStatusCode.NotFound);
+                return await req.CreateErrorResponseAsync(
+                    HttpStatusCode.NotFound,
+                    "NotFound",
+                    "The requested file was not found in OneLake.");
             }
 
-            // ƒtƒ@ƒCƒ‹‚ğƒ_ƒEƒ“ƒ[ƒh
+            // ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½_ï¿½Eï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½h
             var downloadResponse = await fileClient.ReadAsync();
 
             var resp = req.CreateResponse(HttpStatusCode.OK);
@@ -67,22 +74,34 @@ public class GetFilePassthrough
         catch (Azure.RequestFailedException ex) when (ex.Status == 403)
         {
             _logger.LogError(ex, "Access forbidden when trying to access OneLake file.");
-            return req.CreateResponse(HttpStatusCode.Forbidden);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.Forbidden,
+                "AccessDenied",
+                "Access to OneLake is denied.");
         }
         catch (Azure.RequestFailedException ex) when (ex.Status == 404)
         {
             _logger.LogError(ex, "File not found in OneLake.");
-            return req.CreateResponse(HttpStatusCode.NotFound);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.NotFound,
+                "NotFound",
+                "The requested file was not found in OneLake.");
         }
         catch (Azure.RequestFailedException ex)
         {
             _logger.LogError(ex, "Azure request failed with status {Status}: {Message}", ex.Status, ex.Message);
-            return req.CreateResponse(HttpStatusCode.InternalServerError);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.ServiceUnavailable,
+                "DependencyUnavailable",
+                "Failed to access OneLake.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error occurred while processing OneLake file request.");
-            return req.CreateResponse(HttpStatusCode.InternalServerError);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.InternalServerError,
+                "ServerError",
+                "An unexpected error occurred while processing the request.");
         }
     }
 }

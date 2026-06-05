@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Azure.Core;
 using Azure.Identity;
+using function_onelake.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -26,21 +27,19 @@ public class GetEmployeesBySql
     {
         _logger.LogInformation("Processing SQL employees aggregation request.");
 
-        // 1) ŠÂ‹«•Ï”
+        // 1) ï¿½Â‹ï¿½ï¿½Ïï¿½
         var sqlEndpoint = Environment.GetEnvironmentVariable("SQL_ENDPOINT");
         var sqlDatabase = Environment.GetEnvironmentVariable("SQL_DATABASE");
 
         if (string.IsNullOrWhiteSpace(sqlEndpoint) || string.IsNullOrWhiteSpace(sqlDatabase))
         {
-            var respBad = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await respBad.WriteAsJsonAsync(new
-            {
-                error = "Database configuration missing. Please set SQL_ENDPOINT and SQL_DATABASE environment variables."
-            });
-            return respBad;
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.InternalServerError,
+                "ServerError",
+                "Environment variables 'SQL_ENDPOINT' and 'SQL_DATABASE' must be configured.");
         }
 
-        // 2) ƒNƒGƒŠæ“¾ (?department=IT ‚È‚Ç)
+        // 2) ï¿½Nï¿½Gï¿½ï¿½ï¿½æ“¾ (?department=IT ï¿½È‚ï¿½)
         string? department = null;
         var q = QueryHelpers.ParseQuery(req.Url.Query);
         if (q.TryGetValue("department", out var depVals))
@@ -50,8 +49,8 @@ public class GetEmployeesBySql
 
         try
         {
-            // 3) Entra ID ƒg[ƒNƒ“æ“¾
-            //    ‚Ü‚¸ Azure CLI ‚Ì‘Šiî•ñ‚ğg‚¢A¸”s‚µ‚½ê‡‚Ì‚İ DefaultAzureCredential ‚ÉƒtƒH[ƒ‹ƒoƒbƒN
+            // 3) Entra ID ï¿½gï¿½[ï¿½Nï¿½ï¿½ï¿½æ“¾
+            //    ï¿½Ü‚ï¿½ Azure CLI ï¿½Ìï¿½ï¿½iï¿½ï¿½ï¿½ï¿½ï¿½gï¿½ï¿½ï¿½Aï¿½ï¿½ï¿½sï¿½ï¿½ï¿½ï¿½ï¿½ê‡ï¿½Ì‚ï¿½ DefaultAzureCredential ï¿½Éƒtï¿½Hï¿½[ï¿½ï¿½ï¿½oï¿½bï¿½N
             AccessToken token;
             var scope = new TokenRequestContext(new[] { "https://database.windows.net/.default" });
 
@@ -69,11 +68,11 @@ public class GetEmployeesBySql
                 _logger.LogInformation("Access token acquired via DefaultAzureCredential.");
             }
 
-            // 4) Ú‘±•¶š—ñì¬
+            // 4) ï¿½Ú‘ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ì¬
             var csb = new SqlConnectionStringBuilder
             {
-                DataSource = sqlEndpoint,     // —á: "<xxx>.datawarehouse.fabric.microsoft.com"
-                InitialCatalog = sqlDatabase, // —á: "fabricdemo"
+                DataSource = sqlEndpoint,     // ï¿½ï¿½: "<xxx>.datawarehouse.fabric.microsoft.com"
+                InitialCatalog = sqlDatabase, // ï¿½ï¿½: "fabricdemo"
                 Encrypt = true,
                 TrustServerCertificate = false,
                 ConnectTimeout = 30
@@ -85,7 +84,7 @@ public class GetEmployeesBySql
             };
             await conn.OpenAsync();
 
-            // 5) SQL (WŒv‚Í DB ‘¤‚ÖƒvƒbƒVƒ…ƒ_ƒEƒ“)
+            // 5) SQL (ï¿½Wï¿½vï¿½ï¿½ DB ï¿½ï¿½ï¿½Öƒvï¿½bï¿½Vï¿½ï¿½ï¿½_ï¿½Eï¿½ï¿½)
             string sql;
             var cmd = conn.CreateCommand();
 
@@ -124,7 +123,7 @@ public class GetEmployeesBySql
                 }
             }
 
-            // 6) ‰“šì¬inull ‚ğíœj
+            // 6) ï¿½ï¿½ï¿½ï¿½ï¿½ì¬ï¿½inull ï¿½ï¿½ï¿½íœï¿½j
             var resp = req.CreateResponse(HttpStatusCode.OK);
             resp.Headers.Add("Content-Type", "application/json; charset=utf-8");
 
@@ -144,32 +143,26 @@ public class GetEmployeesBySql
         catch (SqlException ex)
         {
             _logger.LogError(ex, "SQL error occurred while querying employee data.");
-            var resp = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await resp.WriteAsJsonAsync(new
-            {
-                error = "Database connection failed. Please check the SQL endpoint configuration and ensure the database is accessible."
-            });
-            return resp;
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.ServiceUnavailable,
+                "DependencyUnavailable",
+                "Failed to connect to SQL.");
         }
         catch (AuthenticationFailedException ex)
         {
             _logger.LogError(ex, "Authentication failed while connecting to database.");
-            var resp = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await resp.WriteAsJsonAsync(new
-            {
-                error = "Authentication failed. Please ensure Entra ID authentication is properly configured."
-            });
-            return resp;
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.ServiceUnavailable,
+                "DependencyUnavailable",
+                "Failed to authenticate to SQL.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error occurred while processing SQL employees request.");
-            var resp = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await resp.WriteAsJsonAsync(new
-            {
-                error = "An unexpected error occurred while processing the request."
-            });
-            return resp;
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.InternalServerError,
+                "ServerError",
+                "An unexpected error occurred while processing the request.");
         }
     }
 }
