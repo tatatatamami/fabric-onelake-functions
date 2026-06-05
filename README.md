@@ -1,4 +1,4 @@
-# FabricOnelakeFunctions
+# Azure Functions OneLake Access Sample
 
 Azure Functions から Microsoft Fabric OneLake 上の CSV / SQL にアクセスする比較用 PoC サンプルです。
 
