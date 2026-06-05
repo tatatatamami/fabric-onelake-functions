@@ -14,10 +14,12 @@ namespace function_onelake.Endpoints;
 public class GetEmployeesBySql
 {
     private readonly ILogger<GetEmployeesBySql> _logger;
+    private readonly TokenCredential _credential;
 
-    public GetEmployeesBySql(ILogger<GetEmployeesBySql> logger)
+    public GetEmployeesBySql(ILogger<GetEmployeesBySql> logger, TokenCredential credential)
     {
         _logger = logger;
+        _credential = credential;
     }
 
     [Function("GetEmployeesBySql")]
@@ -26,7 +28,7 @@ public class GetEmployeesBySql
     {
         _logger.LogInformation("Processing SQL employees aggregation request.");
 
-        // 1) ŠÂ‹«•Ï”
+        // 1) ï¿½Â‹ï¿½ï¿½Ïï¿½
         var sqlEndpoint = Environment.GetEnvironmentVariable("SQL_ENDPOINT");
         var sqlDatabase = Environment.GetEnvironmentVariable("SQL_DATABASE");
 
@@ -40,7 +42,7 @@ public class GetEmployeesBySql
             return respBad;
         }
 
-        // 2) ƒNƒGƒŠæ“¾ (?department=IT ‚È‚Ç)
+        // 2) ï¿½Nï¿½Gï¿½ï¿½ï¿½æ“¾ (?department=IT ï¿½È‚ï¿½)
         string? department = null;
         var q = QueryHelpers.ParseQuery(req.Url.Query);
         if (q.TryGetValue("department", out var depVals))
@@ -50,30 +52,16 @@ public class GetEmployeesBySql
 
         try
         {
-            // 3) Entra ID ƒg[ƒNƒ“æ“¾
-            //    ‚Ü‚¸ Azure CLI ‚Ì‘Šiî•ñ‚ğg‚¢A¸”s‚µ‚½ê‡‚Ì‚İ DefaultAzureCredential ‚ÉƒtƒH[ƒ‹ƒoƒbƒN
-            AccessToken token;
+            // 3) Entra ID ï¿½gï¿½[ï¿½Nï¿½ï¿½ï¿½æ“¾
             var scope = new TokenRequestContext(new[] { "https://database.windows.net/.default" });
+            var token = await _credential.GetTokenAsync(scope, default);
+            _logger.LogInformation("Access token acquired successfully.");
 
-            try
-            {
-                var cli = new AzureCliCredential();
-                token = await cli.GetTokenAsync(scope, default);
-                _logger.LogInformation("Access token acquired via AzureCliCredential.");
-            }
-            catch (Exception cliEx)
-            {
-                _logger.LogWarning(cliEx, "AzureCliCredential failed. Falling back to DefaultAzureCredential.");
-                var @default = new DefaultAzureCredential();
-                token = await @default.GetTokenAsync(scope, default);
-                _logger.LogInformation("Access token acquired via DefaultAzureCredential.");
-            }
-
-            // 4) Ú‘±•¶š—ñì¬
+            // 4) ï¿½Ú‘ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ì¬
             var csb = new SqlConnectionStringBuilder
             {
-                DataSource = sqlEndpoint,     // —á: "<xxx>.datawarehouse.fabric.microsoft.com"
-                InitialCatalog = sqlDatabase, // —á: "fabricdemo"
+                DataSource = sqlEndpoint,     // ï¿½ï¿½: "<xxx>.datawarehouse.fabric.microsoft.com"
+                InitialCatalog = sqlDatabase, // ï¿½ï¿½: "fabricdemo"
                 Encrypt = true,
                 TrustServerCertificate = false,
                 ConnectTimeout = 30
@@ -85,7 +73,7 @@ public class GetEmployeesBySql
             };
             await conn.OpenAsync();
 
-            // 5) SQL (WŒv‚Í DB ‘¤‚ÖƒvƒbƒVƒ…ƒ_ƒEƒ“)
+            // 5) SQL (ï¿½Wï¿½vï¿½ï¿½ DB ï¿½ï¿½ï¿½Öƒvï¿½bï¿½Vï¿½ï¿½ï¿½_ï¿½Eï¿½ï¿½)
             string sql;
             var cmd = conn.CreateCommand();
 
@@ -124,7 +112,7 @@ public class GetEmployeesBySql
                 }
             }
 
-            // 6) ‰“šì¬inull ‚ğíœj
+            // 6) ï¿½ï¿½ï¿½ï¿½ï¿½ì¬ï¿½inull ï¿½ï¿½ï¿½íœï¿½j
             var resp = req.CreateResponse(HttpStatusCode.OK);
             resp.Headers.Add("Content-Type", "application/json; charset=utf-8");
 

@@ -1,4 +1,4 @@
-using Azure.Identity;
+using Azure.Core;
 using Azure.Storage.Files.DataLake;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -10,9 +10,9 @@ namespace function_onelake.Endpoints;
 public class GetFilePassthrough
 {
     private readonly ILogger<GetFilePassthrough> _logger;
-    private readonly DefaultAzureCredential _credential;
+    private readonly TokenCredential _credential;
 
-    public GetFilePassthrough(ILogger<GetFilePassthrough> logger, DefaultAzureCredential credential)
+    public GetFilePassthrough(ILogger<GetFilePassthrough> logger, TokenCredential credential)
     {
         _logger = logger;
         _credential = credential;
@@ -26,7 +26,7 @@ public class GetFilePassthrough
 
         try
         {
-            // ŠÂ‹«•Ï”‚©‚ç OneLake ‚Ìƒtƒ@ƒCƒ‹ URL ‚ğæ“¾
+            // ï¿½Â‹ï¿½ï¿½Ïï¿½ï¿½ï¿½ï¿½ï¿½ OneLake ï¿½Ìƒtï¿½@ï¿½Cï¿½ï¿½ URL ï¿½ï¿½ï¿½æ“¾
             var oneLakeFileUrl = Environment.GetEnvironmentVariable("ONELAKE_DFS_FILE_URL");
             _logger.LogInformation("ONELAKE_DFS_FILE_URL = {Url}", oneLakeFileUrl);
 
@@ -36,17 +36,13 @@ public class GetFilePassthrough
                 return req.CreateResponse(HttpStatusCode.InternalServerError);
             }
 
-            // OneLake ‚ª—v‹‚·‚é API ƒo[ƒWƒ‡ƒ“‚ğ–¾¦i2023-11-03j
+            // OneLake ï¿½ï¿½ï¿½vï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ API ï¿½oï¿½[ï¿½Wï¿½ï¿½ï¿½ï¿½ï¿½ğ–¾ï¿½ï¿½i2023-11-03ï¿½j
             var dlOptions = new DataLakeClientOptions(DataLakeClientOptions.ServiceVersion.V2023_11_03);
 
-            // ‚Ü‚¸‚Í Azure CLI ‚Æ“¯‚¶‘Šiî•ñ‚Å“®‚©‚µ‚Ä‚İ‚éi“®ìŠm”F—pj
-            // ƒfƒ‚‚Å–â‘è‚È‚¯‚ê‚Î _credential ‚É·‚µ‘Ö‚¦‰Â”\
-            var credential = new AzureCliCredential();
+            // FileClient ï¿½ğ¶ï¿½
+            var fileClient = new DataLakeFileClient(new Uri(oneLakeFileUrl), _credential, dlOptions);
 
-            // FileClient ‚ğ¶¬
-            var fileClient = new DataLakeFileClient(new Uri(oneLakeFileUrl), credential, dlOptions);
-
-            // ƒtƒ@ƒCƒ‹‘¶İŠm”Fi”CˆÓA‚È‚­‚Ä‚à Read ‘¤‚Å 404 ‚ğE‚¦‚éj
+            // ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½İŠmï¿½Fï¿½iï¿½Cï¿½ÓAï¿½È‚ï¿½ï¿½Ä‚ï¿½ Read ï¿½ï¿½ï¿½ï¿½ 404 ï¿½ï¿½ï¿½Eï¿½ï¿½ï¿½ï¿½j
             var existsResponse = await fileClient.ExistsAsync();
             if (!existsResponse.Value)
             {
@@ -54,7 +50,7 @@ public class GetFilePassthrough
                 return req.CreateResponse(HttpStatusCode.NotFound);
             }
 
-            // ƒtƒ@ƒCƒ‹‚ğƒ_ƒEƒ“ƒ[ƒh
+            // ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½_ï¿½Eï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½h
             var downloadResponse = await fileClient.ReadAsync();
 
             var resp = req.CreateResponse(HttpStatusCode.OK);

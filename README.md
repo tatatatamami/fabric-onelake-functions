@@ -33,6 +33,17 @@ curl -sS http://localhost:7071/api/files/raw | head -n 3
 - Azure Functions Core Tools
 - Azure CLI (for authentication)
 
+### Authentication (DefaultAzureCredential)
+- This app uses **DefaultAzureCredential** in all Functions.
+- Local execution requires Azure CLI login:
+  ```bash
+  az login
+  ```
+- Your signed-in identity must have access to:
+  - OneLake endpoint specified by `ONELAKE_DFS_FILE_URL`
+  - SQL endpoint (`SQL_ENDPOINT` / `SQL_DATABASE`) used by `/api/employees/sql`
+- In Azure deployment, grant the Function App managed identity equivalent OneLake/SQL permissions.
+
 ### Build and Run
 ```bash
 dotnet build
