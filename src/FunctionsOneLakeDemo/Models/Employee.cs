@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace function_onelake.Models;
 
 public class Employee
