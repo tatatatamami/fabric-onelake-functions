@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Net;
-using Azure.Identity;
+using Azure.Core;
 using Azure.Storage.Files.DataLake;
 using CsvHelper;
 using CsvHelper.Configuration;
@@ -23,11 +23,13 @@ namespace function_onelake.Endpoints;
 public class GetEmployeesFiltered
 {
     private readonly ILogger<GetEmployeesFiltered> _logger;
+    private readonly TokenCredential _credential;
     private const int MaxItems = 50;
 
-    public GetEmployeesFiltered(ILogger<GetEmployeesFiltered> logger)
+    public GetEmployeesFiltered(ILogger<GetEmployeesFiltered> logger, TokenCredential credential)
     {
         _logger = logger;
+        _credential = credential;
     }
 
     [Function("GetEmployeesFiltered")]
@@ -59,10 +61,7 @@ public class GetEmployeesFiltered
             // OneLake �� 2023-11-03 �� API �o�[�W�������g�p
             var options = new DataLakeClientOptions(DataLakeClientOptions.ServiceVersion.V2023_11_03);
 
-            // �܂��� Azure CLI ���i���œ���m�F�i�K�v�Ȃ� DefaultAzureCredential �ɐؑցj
-            var credential = new AzureCliCredential();
-
-            var fileClient = new DataLakeFileClient(new Uri(csvUrl), credential, options);
+            var fileClient = new DataLakeFileClient(new Uri(csvUrl), _credential, options);
 
             // CSV ���X�g���[���œǂݍ���
             var download = await fileClient.ReadAsync();
