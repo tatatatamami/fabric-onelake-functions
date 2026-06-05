@@ -4,6 +4,7 @@ using Azure.Core;
 using Azure.Storage.Files.DataLake;
 using CsvHelper;
 using CsvHelper.Configuration;
+using function_onelake.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -45,9 +46,10 @@ public class GetEmployeesFiltered
             var department = query.Get("department");
             if (string.IsNullOrWhiteSpace(department))
             {
-                var bad = req.CreateResponse(HttpStatusCode.BadRequest);
-                await bad.WriteStringAsync("Query parameter 'department' is required.");
-                return bad;
+                return await req.CreateErrorResponseAsync(
+                    HttpStatusCode.BadRequest,
+                    "BadRequest",
+                    "Query parameter 'department' is required.");
             }
 
             // OneLake CSV �� URL
@@ -55,7 +57,10 @@ public class GetEmployeesFiltered
             if (string.IsNullOrWhiteSpace(csvUrl))
             {
                 _logger.LogError("ONELAKE_DFS_FILE_URL environment variable is not set.");
-                return req.CreateResponse(HttpStatusCode.InternalServerError);
+                return await req.CreateErrorResponseAsync(
+                    HttpStatusCode.InternalServerError,
+                    "ServerError",
+                    "Environment variable 'ONELAKE_DFS_FILE_URL' is not configured.");
             }
 
             // OneLake �� 2023-11-03 �� API �o�[�W�������g�p
@@ -92,15 +97,10 @@ public class GetEmployeesFiltered
             // ���X�|���X����
             if (employees.Count == 0)
             {
-                var okEmpty = req.CreateResponse(HttpStatusCode.OK);
-                await okEmpty.WriteAsJsonAsync(new EmployeeResponse
-                {
-                    Total = 0,
-                    Department = department,
-                    AverageSalary = 0,
-                    Items = new List<Employee>()
-                });
-                return okEmpty;
+                return await req.CreateErrorResponseAsync(
+                    HttpStatusCode.NotFound,
+                    "NotFound",
+                    $"No employees found for department '{department}'.");
             }
 
             var avg = Math.Round(employees.Average(e => e.Salary));
@@ -119,12 +119,26 @@ public class GetEmployeesFiltered
         catch (Azure.RequestFailedException ex) when (ex.Status == 404)
         {
             _logger.LogWarning(ex, "CSV file not found or inaccessible in OneLake.");
-            return req.CreateResponse(HttpStatusCode.NotFound);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.NotFound,
+                "NotFound",
+                "Employee source file was not found in OneLake.");
+        }
+        catch (Azure.RequestFailedException ex)
+        {
+            _logger.LogError(ex, "OneLake access failed in GetEmployeesFiltered.");
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.ServiceUnavailable,
+                "DependencyUnavailable",
+                "Failed to access OneLake.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error in GetEmployeesFiltered.");
-            return req.CreateResponse(HttpStatusCode.InternalServerError);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.InternalServerError,
+                "ServerError",
+                "An unexpected error occurred while processing the request.");
         }
     }
 

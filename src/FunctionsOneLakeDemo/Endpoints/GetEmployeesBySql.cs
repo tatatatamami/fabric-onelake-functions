@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Azure.Core;
 using Azure.Identity;
+using function_onelake.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -34,12 +35,10 @@ public class GetEmployeesBySql
 
         if (string.IsNullOrWhiteSpace(sqlEndpoint) || string.IsNullOrWhiteSpace(sqlDatabase))
         {
-            var respBad = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await respBad.WriteAsJsonAsync(new
-            {
-                error = "Database configuration missing. Please set SQL_ENDPOINT and SQL_DATABASE environment variables."
-            });
-            return respBad;
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.InternalServerError,
+                "ServerError",
+                "Environment variables 'SQL_ENDPOINT' and 'SQL_DATABASE' must be configured.");
         }
 
         // 2) �N�G���擾 (?department=IT �Ȃ�)
@@ -132,32 +131,26 @@ public class GetEmployeesBySql
         catch (SqlException ex)
         {
             _logger.LogError(ex, "SQL error occurred while querying employee data.");
-            var resp = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await resp.WriteAsJsonAsync(new
-            {
-                error = "Database connection failed. Please check the SQL endpoint configuration and ensure the database is accessible."
-            });
-            return resp;
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.ServiceUnavailable,
+                "DependencyUnavailable",
+                "Failed to connect to SQL.");
         }
         catch (AuthenticationFailedException ex)
         {
             _logger.LogError(ex, "Authentication failed while connecting to database.");
-            var resp = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await resp.WriteAsJsonAsync(new
-            {
-                error = "Authentication failed. Please ensure Entra ID authentication is properly configured."
-            });
-            return resp;
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.ServiceUnavailable,
+                "DependencyUnavailable",
+                "Failed to authenticate to SQL.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error occurred while processing SQL employees request.");
-            var resp = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await resp.WriteAsJsonAsync(new
-            {
-                error = "An unexpected error occurred while processing the request."
-            });
-            return resp;
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.InternalServerError,
+                "ServerError",
+                "An unexpected error occurred while processing the request.");
         }
     }
 }
