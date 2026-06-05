@@ -16,7 +16,6 @@ public class GetFilePassthrough
     public GetFilePassthrough(ILogger<GetFilePassthrough> logger, TokenCredential credential)
     {
         _logger = logger;
-        _credential = credential;
     }
 
     [Function("GetFilePassthrough")]
