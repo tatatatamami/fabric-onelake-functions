@@ -1,5 +1,6 @@
-using Azure.Identity;
+using Azure.Core;
 using Azure.Storage.Files.DataLake;
+using function_onelake.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -10,8 +11,9 @@ namespace function_onelake.Endpoints;
 public class GetFilePassthrough
 {
     private readonly ILogger<GetFilePassthrough> _logger;
+    private readonly TokenCredential _credential;
 
-    public GetFilePassthrough(ILogger<GetFilePassthrough> logger)
+    public GetFilePassthrough(ILogger<GetFilePassthrough> logger, TokenCredential credential)
     {
         _logger = logger;
     }
@@ -31,24 +33,27 @@ public class GetFilePassthrough
             if (string.IsNullOrEmpty(oneLakeFileUrl))
             {
                 _logger.LogError("ONELAKE_DFS_FILE_URL environment variable is not set.");
-                return req.CreateResponse(HttpStatusCode.InternalServerError);
+                return await req.CreateErrorResponseAsync(
+                    HttpStatusCode.InternalServerError,
+                    "ServerError",
+                    "Environment variable 'ONELAKE_DFS_FILE_URL' is not configured.");
             }
 
             // OneLake ���v������ API �o�[�W�����𖾎��i2023-11-03�j
             var dlOptions = new DataLakeClientOptions(DataLakeClientOptions.ServiceVersion.V2023_11_03);
 
-            // �܂��� Azure CLI �Ɠ������i���œ������Ă݂�i����m�F�p�j
-            var credential = new AzureCliCredential();
-
             // FileClient �𐶐�
-            var fileClient = new DataLakeFileClient(new Uri(oneLakeFileUrl), credential, dlOptions);
+            var fileClient = new DataLakeFileClient(new Uri(oneLakeFileUrl), _credential, dlOptions);
 
             // �t�@�C�����݊m�F�i�C�ӁA�Ȃ��Ă� Read ���� 404 ���E����j
             var existsResponse = await fileClient.ExistsAsync();
             if (!existsResponse.Value)
             {
                 _logger.LogWarning("File not found at URL: {FileUrl}", oneLakeFileUrl);
-                return req.CreateResponse(HttpStatusCode.NotFound);
+                return await req.CreateErrorResponseAsync(
+                    HttpStatusCode.NotFound,
+                    "NotFound",
+                    "The requested file was not found in OneLake.");
             }
 
             // �t�@�C�����_�E�����[�h
@@ -64,22 +69,34 @@ public class GetFilePassthrough
         catch (Azure.RequestFailedException ex) when (ex.Status == 403)
         {
             _logger.LogError(ex, "Access forbidden when trying to access OneLake file.");
-            return req.CreateResponse(HttpStatusCode.Forbidden);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.Forbidden,
+                "AccessDenied",
+                "Access to OneLake is denied.");
         }
         catch (Azure.RequestFailedException ex) when (ex.Status == 404)
         {
             _logger.LogError(ex, "File not found in OneLake.");
-            return req.CreateResponse(HttpStatusCode.NotFound);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.NotFound,
+                "NotFound",
+                "The requested file was not found in OneLake.");
         }
         catch (Azure.RequestFailedException ex)
         {
             _logger.LogError(ex, "Azure request failed with status {Status}: {Message}", ex.Status, ex.Message);
-            return req.CreateResponse(HttpStatusCode.InternalServerError);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.ServiceUnavailable,
+                "DependencyUnavailable",
+                "Failed to access OneLake.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error occurred while processing OneLake file request.");
-            return req.CreateResponse(HttpStatusCode.InternalServerError);
+            return await req.CreateErrorResponseAsync(
+                HttpStatusCode.InternalServerError,
+                "ServerError",
+                "An unexpected error occurred while processing the request.");
         }
     }
 }
