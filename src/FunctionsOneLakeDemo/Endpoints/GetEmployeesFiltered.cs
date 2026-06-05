@@ -11,6 +11,15 @@ using function_onelake.Models;
 
 namespace function_onelake.Endpoints;
 
+// PoC implementation: reads a CSV file from OneLake and filters rows in memory.
+//
+// Limitations:
+//   - Every request downloads and scans the entire CSV file (full table scan).
+//   - Memory usage and latency grow linearly with the size of the CSV file.
+//   - Not suitable for large datasets or production workloads.
+//
+// For production use, consider GET /api/employees/sql which pushes aggregation
+// to the Fabric SQL endpoint (Lakehouse / Warehouse) for scalable, engine-side processing.
 public class GetEmployeesFiltered
 {
     private readonly ILogger<GetEmployeesFiltered> _logger;
@@ -29,7 +38,7 @@ public class GetEmployeesFiltered
     {
         try
         {
-            _logger.LogInformation("Processing GET /api/employees request");
+            _logger.LogInformation("Processing GET /api/employees request (PoC: full CSV scan)");
 
             // �N�G��: department �K�{
             var query = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
