@@ -11,6 +11,15 @@ using function_onelake.Models;
 
 namespace function_onelake.Endpoints;
 
+// PoC implementation: reads a CSV file from OneLake and filters rows in memory.
+//
+// Limitations:
+//   - Every request downloads and scans the entire CSV file (full table scan).
+//   - Memory usage and latency grow linearly with the size of the CSV file.
+//   - Not suitable for large datasets or production workloads.
+//
+// For production use, consider GET /api/employees/sql which pushes aggregation
+// to the Fabric SQL endpoint (Lakehouse / Warehouse) for scalable, engine-side processing.
 public class GetEmployeesFiltered
 {
     private readonly ILogger<GetEmployeesFiltered> _logger;
@@ -27,9 +36,9 @@ public class GetEmployeesFiltered
     {
         try
         {
-            _logger.LogInformation("Processing GET /api/employees request");
+            _logger.LogInformation("Processing GET /api/employees request (PoC: full CSV scan)");
 
-            // ƒNƒGƒŠ: department •K{
+            // ï¿½Nï¿½Gï¿½ï¿½: department ï¿½Kï¿½{
             var query = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
             var department = query.Get("department");
             if (string.IsNullOrWhiteSpace(department))
@@ -39,7 +48,7 @@ public class GetEmployeesFiltered
                 return bad;
             }
 
-            // OneLake CSV ‚Ì URL
+            // OneLake CSV ï¿½ï¿½ URL
             var csvUrl = Environment.GetEnvironmentVariable("ONELAKE_DFS_FILE_URL");
             if (string.IsNullOrWhiteSpace(csvUrl))
             {
@@ -47,15 +56,15 @@ public class GetEmployeesFiltered
                 return req.CreateResponse(HttpStatusCode.InternalServerError);
             }
 
-            // OneLake ‚Í 2023-11-03 ‚Ì API ƒo[ƒWƒ‡ƒ“‚ğg—p
+            // OneLake ï¿½ï¿½ 2023-11-03 ï¿½ï¿½ API ï¿½oï¿½[ï¿½Wï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½gï¿½p
             var options = new DataLakeClientOptions(DataLakeClientOptions.ServiceVersion.V2023_11_03);
 
-            // ‚Ü‚¸‚Í Azure CLI ‘Šiî•ñ‚Å“®ìŠm”Fi•K—v‚È‚ç DefaultAzureCredential ‚ÉØ‘Öj
+            // ï¿½Ü‚ï¿½ï¿½ï¿½ Azure CLI ï¿½ï¿½ï¿½iï¿½ï¿½ï¿½Å“ï¿½ï¿½ï¿½mï¿½Fï¿½iï¿½Kï¿½vï¿½È‚ï¿½ DefaultAzureCredential ï¿½ÉØ‘Öj
             var credential = new AzureCliCredential();
 
             var fileClient = new DataLakeFileClient(new Uri(csvUrl), credential, options);
 
-            // CSV ‚ğƒXƒgƒŠ[ƒ€‚Å“Ç‚İ‚İ
+            // CSV ï¿½ï¿½ï¿½Xï¿½gï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½Å“Ç‚İï¿½ï¿½ï¿½
             var download = await fileClient.ReadAsync();
             using var stream = download.Value.Content;
             using var reader = new StreamReader(stream);
@@ -67,10 +76,10 @@ public class GetEmployeesFiltered
                 BadDataFound = null
             });
 
-            // —ñ–¼: id,name,age,department,salary ‚ğ Employee ‚Éƒ}ƒbƒv
+            // ï¿½ï¿½: id,name,age,department,salary ï¿½ï¿½ Employee ï¿½Éƒ}ï¿½bï¿½v
             csv.Context.RegisterClassMap<EmployeeMap>();
 
-            // ƒtƒBƒ‹ƒ^i‘å•¶š¬•¶š–³‹j
+            // ï¿½tï¿½Bï¿½ï¿½ï¿½^ï¿½iï¿½å•¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½j
             var deptLower = department.Trim().ToLowerInvariant();
             var employees = new List<Employee>();
             await foreach (var rec in csv.GetRecordsAsync<Employee>())
@@ -81,7 +90,7 @@ public class GetEmployeesFiltered
                 }
             }
 
-            // ƒŒƒXƒ|ƒ“ƒX¶¬
+            // ï¿½ï¿½ï¿½Xï¿½|ï¿½ï¿½ï¿½Xï¿½ï¿½ï¿½ï¿½
             if (employees.Count == 0)
             {
                 var okEmpty = req.CreateResponse(HttpStatusCode.OK);
@@ -120,7 +129,7 @@ public class GetEmployeesFiltered
         }
     }
 
-    // CsvHelper ƒ}ƒbƒsƒ“ƒOiCSVƒwƒbƒ_[‚Éˆê’vj
+    // CsvHelper ï¿½}ï¿½bï¿½sï¿½ï¿½ï¿½Oï¿½iCSVï¿½wï¿½bï¿½_ï¿½[ï¿½Éˆï¿½vï¿½j
     private sealed class EmployeeMap : ClassMap<Employee>
     {
         public EmployeeMap()

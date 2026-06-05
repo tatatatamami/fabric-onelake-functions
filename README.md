@@ -2,9 +2,9 @@
 
 Azure Functions から Microsoft Fabric OneLake 上の CSV / SQL にアクセスする比較用 PoC サンプルです。
 
-- OneLake 上の CSV をそのまま返すサンプル
-- CSV を Azure Functions 側で読み込んで絞り込むサンプル
-- Fabric SQL エンドポイントで集計するサンプル
+* OneLake 上の CSV をそのまま返すサンプル
+* CSV を Azure Functions 側で読み込んで絞り込むサンプル
+* Fabric SQL エンドポイントで集計するサンプル
 
 本リポジトリは **PoC 用** です。本番運用を前提とした認証、監視、テスト、性能最適化は最小限です。
 
@@ -13,21 +13,24 @@ Azure Functions から Microsoft Fabric OneLake 上の CSV / SQL にアクセス
 Azure Functions から OneLake 上の社員データにアクセスする 2 つの方法を比較しやすくすることを目的にしています。
 
 1. **CSV 直接アクセス**
-   - OneLake 上の CSV を Azure Functions で読み取る
-   - ファイル取得や全件走査ベースの検証向け
+
+   * OneLake 上の CSV を Azure Functions で読み取る
+   * ファイル取得や全件走査ベースの検証向け
+
 2. **SQL エンドポイントアクセス**
-   - Fabric SQL エンドポイントに対してクエリを実行する
-   - 集計や絞り込みを DB 側に寄せたいケースの比較向け
+
+   * Fabric SQL エンドポイントに対してクエリを実行する
+   * 集計や絞り込みを DB 側に寄せたいケースの比較向け
 
 ## 実装済みエンドポイント
 
-| Method | Endpoint | 概要 |
-| --- | --- | --- |
-| GET | `/api/files/raw` | OneLake 上の CSV をそのまま返す |
-| GET | `/api/employees?department=IT` | CSV を Azure Functions 側で全件読み込みし、department で絞り込んで JSON を返す |
-| GET | `/api/employees/sql?department=IT` | Fabric SQL エンドポイントで集計し、JSON を返す |
+| Method | Endpoint                           | 概要                                                         |
+| ------ | ---------------------------------- | ---------------------------------------------------------- |
+| GET    | `/api/files/raw`                   | OneLake 上の CSV をそのまま返す                                     |
+| GET    | `/api/employees?department=IT`     | CSV を Azure Functions 側で全件読み込みし、department で絞り込んで JSON を返す |
+| GET    | `/api/employees/sql?department=IT` | Fabric SQL エンドポイントで集計し、JSON を返す                            |
 
-### GET /api/files/raw
+## GET /api/files/raw
 
 OneLake 上の CSV ファイルを `text/csv` でそのまま返します。
 
@@ -35,7 +38,7 @@ OneLake 上の CSV ファイルを `text/csv` でそのまま返します。
 curl -sS http://localhost:7071/api/files/raw | head -n 3
 ```
 
-### GET /api/employees?department=IT
+## GET /api/employees?department=IT
 
 `department` クエリパラメータは必須です。Azure Functions 側で CSV を読み込み、対象部門のデータを JSON で返します。
 
@@ -62,7 +65,18 @@ curl -sS "http://localhost:7071/api/employees?department=IT"
 }
 ```
 
-### GET /api/employees/sql?department=IT
+### PoC としての制約
+
+このエンドポイントは、OneLake 上の CSV を Azure Functions から直接読み取り、Functions 側で簡易的にフィルタするサンプルです。
+OneLake への接続確認や、小規模データでの動作確認には有効ですが、本番用途や大規模データには向きません。
+
+制約:
+
+* リクエストごとに CSV を全件走査します
+* データ量が増えると、メモリ使用量とレスポンス時間が増加します
+* 大規模データや本番用途では、SQL エンドポイント、事前集計、Lakehouse / Warehouse 側での処理を検討してください
+
+## GET /api/employees/sql?department=IT
 
 `department` を指定すると SQL 側で条件を付けて集計します。未指定の場合は全件を対象に集計します。
 
@@ -80,15 +94,24 @@ curl -sS "http://localhost:7071/api/employees/sql?department=IT"
 }
 ```
 
+### CSV フィルタ方式との比較
+
+| 観点       | `/api/employees`   | `/api/employees/sql` |
+| -------- | ------------------ | -------------------- |
+| データソース   | OneLake CSV ファイル   | Fabric SQL エンドポイント   |
+| フィルタ実行場所 | Azure Functions 側  | SQL エンジン側            |
+| スケーラビリティ | 低い。CSV 全件走査        | 高い。DB 側で条件指定・集計      |
+| 主な用途     | PoC / 接続確認 / 小規模検証 | 集計・絞り込み・本番寄りの検証      |
+
 ## 必要な環境変数
 
 `local.settings.json` の `Values` に以下を設定します。
 
-| Key | 必須 | 説明 |
-| --- | --- | --- |
-| `ONELAKE_DFS_FILE_URL` | `/api/files/raw`, `/api/employees` で必須 | OneLake 上の CSV ファイル URL |
-| `SQL_ENDPOINT` | `/api/employees/sql` で必須 | Fabric SQL Endpoint のホスト名 |
-| `SQL_DATABASE` | `/api/employees/sql` で必須 | 接続先データベース名 |
+| Key                    | 必須                                     | 説明                        |
+| ---------------------- | -------------------------------------- | ------------------------- |
+| `ONELAKE_DFS_FILE_URL` | `/api/files/raw`, `/api/employees` で必須 | OneLake 上の CSV ファイル URL   |
+| `SQL_ENDPOINT`         | `/api/employees/sql` で必須               | Fabric SQL Endpoint のホスト名 |
+| `SQL_DATABASE`         | `/api/employees/sql` で必須               | 接続先データベース名                |
 
 例:
 
@@ -109,9 +132,9 @@ curl -sS "http://localhost:7071/api/employees/sql?department=IT"
 
 ### 前提
 
-- .NET 8 SDK
-- Azure Functions Core Tools v4
-- Azure CLI
+* .NET 8 SDK
+* Azure Functions Core Tools v4
+* Azure CLI
 
 ### Azure 認証
 
@@ -127,6 +150,12 @@ az login
 az account set --subscription <SUBSCRIPTION_ID_OR_NAME>
 ```
 
+このサンプルでは Azure 認証に `DefaultAzureCredential` を使用します。
+
+ローカル実行時は、Azure CLI でサインインしているユーザーに、対象の OneLake ファイルおよび Fabric SQL エンドポイントへのアクセス権限が必要です。
+
+Azure Functions にデプロイする場合は、Function App のマネージド ID を使用し、OneLake および SQL エンドポイントへの必要な権限を付与します。
+
 ### 起動手順
 
 ```bash
@@ -141,25 +170,26 @@ func start
 
 ### CSV 直接アクセス / Azure Functions 側で処理
 
-- OneLake 上の CSV を Azure Functions が読み込みます
-- 絞り込みや集計のために **CSV を全件走査** します
-- ファイルそのものの取得や、シンプルな PoC には向いています
+* OneLake 上の CSV を Azure Functions が読み込みます
+* 絞り込みや集計のために **CSV を全件走査** します
+* ファイルそのものの取得や、シンプルな PoC には向いています
+* 大規模データや本番用途には不向きです
 
 ### SQL エンドポイント利用
 
-- 集計や条件指定を SQL 側に委譲します
-- Azure Functions からは集計結果だけを取得できます
-- データ量が増えた場合の比較検証や、クエリベースのアクセス確認に向いています
+* 集計や条件指定を SQL 側に委譲します
+* Azure Functions からは集計結果だけを取得できます
+* データ量が増えた場合の比較検証や、クエリベースのアクセス確認に向いています
 
 ## 想定用途
 
-- Azure Functions から OneLake の CSV にアクセスできるかの検証
-- CSV 直接アクセスと SQL エンドポイントアクセスの実装比較
-- Fabric / OneLake を使った小規模な技術検証
+* Azure Functions から OneLake の CSV にアクセスできるかの検証
+* CSV 直接アクセスと SQL エンドポイントアクセスの実装比較
+* Fabric / OneLake を使った小規模な技術検証
 
 ## 非対応事項 / 制約
 
-- 本番運用向けのサンプルではありません
-- 認証、監視、例外設計、テストは最小限です
-- CSV アクセスは Azure Functions 側でファイルを読み込むため、大きなデータセットには不向きです
-- SQL エンドポイント側のテーブル作成やデータ投入はこのリポジトリの対象外です
+* 本番運用向けのサンプルではありません
+* 認証、監視、例外設計、テストは最小限です
+* CSV アクセスは Azure Functions 側でファイルを読み込むため、大きなデータセットには不向きです
+* SQL エンドポイント側のテーブル作成やデータ投入はこのリポジトリの対象外です
