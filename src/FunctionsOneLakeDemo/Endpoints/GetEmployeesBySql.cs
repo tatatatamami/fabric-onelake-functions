@@ -15,10 +15,12 @@ namespace function_onelake.Endpoints;
 public class GetEmployeesBySql
 {
     private readonly ILogger<GetEmployeesBySql> _logger;
+    private readonly TokenCredential _credential;
 
-    public GetEmployeesBySql(ILogger<GetEmployeesBySql> logger)
+    public GetEmployeesBySql(ILogger<GetEmployeesBySql> logger, TokenCredential credential)
     {
         _logger = logger;
+        _credential = credential;
     }
 
     [Function("GetEmployeesBySql")]
@@ -50,23 +52,9 @@ public class GetEmployeesBySql
         try
         {
             // 3) Entra ID �g�[�N���擾
-            //    �܂� Azure CLI �̎��i�����g���A���s�����ꍇ�̂� DefaultAzureCredential �Ƀt�H�[���o�b�N
-            AccessToken token;
             var scope = new TokenRequestContext(new[] { "https://database.windows.net/.default" });
-
-            try
-            {
-                var cli = new AzureCliCredential();
-                token = await cli.GetTokenAsync(scope, default);
-                _logger.LogInformation("Access token acquired via AzureCliCredential.");
-            }
-            catch (Exception cliEx)
-            {
-                _logger.LogWarning(cliEx, "AzureCliCredential failed. Falling back to DefaultAzureCredential.");
-                var @default = new DefaultAzureCredential();
-                token = await @default.GetTokenAsync(scope, default);
-                _logger.LogInformation("Access token acquired via DefaultAzureCredential.");
-            }
+            var token = await _credential.GetTokenAsync(scope, default);
+            _logger.LogInformation("Access token acquired successfully.");
 
             // 4) �ڑ�������쐬
             var csb = new SqlConnectionStringBuilder

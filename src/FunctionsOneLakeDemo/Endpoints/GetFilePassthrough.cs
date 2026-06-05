@@ -1,4 +1,4 @@
-using Azure.Identity;
+using Azure.Core;
 using Azure.Storage.Files.DataLake;
 using function_onelake.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -11,9 +11,9 @@ namespace function_onelake.Endpoints;
 public class GetFilePassthrough
 {
     private readonly ILogger<GetFilePassthrough> _logger;
-    private readonly DefaultAzureCredential _credential;
+    private readonly TokenCredential _credential;
 
-    public GetFilePassthrough(ILogger<GetFilePassthrough> logger, DefaultAzureCredential credential)
+    public GetFilePassthrough(ILogger<GetFilePassthrough> logger, TokenCredential credential)
     {
         _logger = logger;
         _credential = credential;
@@ -43,12 +43,8 @@ public class GetFilePassthrough
             // OneLake ���v������ API �o�[�W�����𖾎��i2023-11-03�j
             var dlOptions = new DataLakeClientOptions(DataLakeClientOptions.ServiceVersion.V2023_11_03);
 
-            // �܂��� Azure CLI �Ɠ������i���œ������Ă݂�i����m�F�p�j
-            // �f���Ŗ��Ȃ���� _credential �ɍ����ւ��\
-            var credential = new AzureCliCredential();
-
             // FileClient �𐶐�
-            var fileClient = new DataLakeFileClient(new Uri(oneLakeFileUrl), credential, dlOptions);
+            var fileClient = new DataLakeFileClient(new Uri(oneLakeFileUrl), _credential, dlOptions);
 
             // �t�@�C�����݊m�F�i�C�ӁA�Ȃ��Ă� Read ���� 404 ���E����j
             var existsResponse = await fileClient.ExistsAsync();
